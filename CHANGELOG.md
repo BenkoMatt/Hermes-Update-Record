@@ -175,4 +175,28 @@ Total: 4 files, +134 / -26 lines.
 - Whether to keep the snapshot retained or rotate it after a clean
   smoke test.
 
+---### 2026-09-14 — Release Watcher false positive: date-tag vs semver comparison
+
+**Status:** No upgrade performed. Monitoring fix only.
+
+**Event:** The `hermes-release-check.sh` monitor fired reporting
+`latest=v2026.9.11 installed=v0.21.2 behind=813`. Investigation showed
+v2026.9.11 and v0.21.2 are the **same release** (GitHub title:
+"Hermes Agent v0.21.2 (v2026.9.11)", published 2026-09-11) — Hermes ships
+each release under both a semver tag and a date tag. The script compared
+the date tag against `hermes --version`'s semver, which would have
+false-positived every weekly run.
+
+**Fix:** Script now resolves the release title and, when it contains the
+installed version string, reports the installed form as `latest`. Patched
+both copies (`/root/.hermes/scripts/` and
+`/root/.hermes/profiles/daily/scripts/`); verified both now output
+`latest=v0.21.2 installed=v0.21.2 behind=813`.
+
+**Also noted:** HEAD of the installed repo is `v2026.9.11-2-g31d0a2428e`
+(two local commits after the release tag); gateway was restarted onto this
+code 2026-09-11 16:41 EDT. The `behind=813` figure is hermes's cached count
+of *unreleased* `main` commits (fresh fetch shows 937 on 2026-09-14) —
+normal drift, not a new release.
+
 ---
