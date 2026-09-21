@@ -200,3 +200,45 @@ of *unreleased* `main` commits (fresh fetch shows 937 on 2026-09-14) —
 normal drift, not a new release.
 
 ---
+
+### 2026-09-21 — Post-upgrade verification: v0.21.3 (v2026.9.14) confirmed installed and healthy
+
+**Status:** Verification record. The upgrade itself was performed outside
+any recorded session (no changelog entry was made at the time); this entry
+records the verified current state instead of a fabricated procedure.
+
+**Release:** v0.21.3 (v2026.9.14), published 2026-09-14 16:04 UTC. Patch
+release rolling up ~338 PRs since v0.21.2, cut primarily to ship the
+remote-gateway refresh-token coalescing fix (Desktop sessions revoked on
+refresh bursts) and the state.db duplicate-writer-handle fix to Cloud/
+release-tag consumers. Full curated notes for the window deferred to
+v0.22.0 upstream.
+
+**When it went live:** Repo fast-forwarded daily since 2026-09-15 10:00 EDT
+(git reflog: daily `merge origin/main` fast-forwards 9/15 → 9/21, each
+followed by gateway + dashboard restarts at varying times — driver not
+identified; no cron job or system crontab entry performs updates). v0.21.3
+code has therefore been live since on or before 2026-09-15.
+
+**Verified 2026-09-21 ~09:00 EDT:**
+- `hermes --version` → v0.21.3 (2026.9.14), upstream ea0c2b82; `Up to date`
+- HEAD `ea0c2b820b` (2026-09-21), 0 commits behind origin/main; the
+  v0.21.3..HEAD delta (≈4,926 non-merge commits) is already installed and
+  running — the next release will be a restart-only event for this host
+- `active_profile` had been reset to `default` by the update(s); restored
+  to `daily` via `hermes profile use daily` this run; file verified
+- Local `.hermes`-basename profile patch (`normalize_profile_name()`,
+  hermes_cli/profiles.py ~line 183) — still present after the
+  fast-forwards (upstream has not shipped its own fix)
+- Rogue `hermes-gateway-daily.service` user unit: still disabled + dead;
+  no ticker heartbeat revival
+- Venv: openpyxl 3.1.5 / pdfplumber 0.11.10 / httpx 0.28.1 present;
+  budget-app service active
+- `hermes doctor`: no advisories, all DBs healthy in WAL mode,
+  version files consistent (0.21.3)
+- Cron: single-store discipline intact (0 job-ID overlap between global
+  store and daily mirror fire locks)
+
+**Breakage:** None observed.
+
+---
