@@ -349,6 +349,57 @@ code has therefore been live since on or before 2026-09-15.
 
 ---
 
+### 2026-09-28 09:30 — Release Watcher addendum: update driver identified (desktop
+app), updates #2–#3 fired mid-watch, himalaya skill doc restored to stock
+
+**Status:** Monitoring addendum to the 09:15 entry. No gateway/dashboard restart
+performed by the watcher.
+
+**Update driver identified (closes the 9/15 open question):** the driver is
+Matt's desktop app. Timeline this morning (gui.log + hermes-update.log + ps
+ppid): desktop ws connects 08:31/08:44/08:53 → `hermes update` #1 spawned
+09:00:04 as a CHILD of the dashboard process (PPID 1260454), 10 s after the
+08:59:54 ws accept; update #2 spawned 09:11:46 right after Matt's 09:06:34
+reconnect; update #3 fired 09:21 (while this watcher run was in progress).
+The "unidentified daily fast-forwards" since 9/15 are desktop-triggered
+updates (Matt or the desktop app's update affordance), not cron. The three
+9/28 runs logged: v0.21.5+2945 → +4108 (09:00), +4108 → +4125 (09:11),
++4125 → +4126 [main @ 96aa40a49f] (09:21). Each run also re-triggers the
+multiplex recommendation + RestartPreventExitStatus=78 warning in its tail.
+
+**Watcher script:** the parallel 09:13 fix (probe repo venv first, git-derived
+behind, base-semver reporting) is correct and verified in this run — output
+`latest=v0.21.5 installed=v0.21.5 behind=0`. Mirrors identical in
+/root/.hermes/scripts/ and profiles/daily/scripts/.
+
+**himalaya skill doc restored to stock (by the watcher run):**
+`hermes skills list-modified` showed 2 user-modified bundled skills after the
+update code drop: `hermes-agent` (38-file drift; stock is version 3.2.0 vs
+our stale 2.1.0 copy — resolved by the update's bundled-skill baseline) and
+`himalaya` (1 file: our copy had `himalaya message move 42 "Archive"` — ID
+before target — while the installed himalaya CLI takes `<TARGET> <ID>...`,
+target first). The stale local doc was factually wrong and could make Caddy
+construct backwards move/copy commands; restored with
+`hermes skills reset himalaya --restore` (verified: list-modified now shows
+no user-modified bundled skills).
+
+**Cron liveness false-negative:** `hermes cron status` (repo venv CLI) says
+"No scheduler is serving profile 'daily' — its cron jobs will NOT fire."
+Contradicted by observed reality: ticker heartbeat/.tick.lock fresh within
+the last minute, and 5 job outputs written 09:00–09:15 (this watcher job
+itself fired at 09:13:45 from the post-fix monitor change). The new
+liveness probe appears to miss the system-unit gateway's routing
+registration (same signature as the update-flow's multiplex advice).
+Do not act on the ✗ line by installing a second gateway — cron is ticking.
+
+**Gateway restart debt (unchanged, needs Matt):** gateway PID 1260418 still
+running the 9/26 e295174 snapshot — three update drops (105568c, e824425e,
+96aa40a) live on disk, not in gateway memory. Dashboard DID restart (09:15:48,
+new PID 1464529, ExecStart intact with --open-profile daily). Post-update
+CLI still prints the mixed-sys.modules warning on every invocation.
+
+---
+
 ### 2026-09-21 09:08 — Release Watcher: behind=0→2 race, desktop-only commits
 
 **Status:** Monitoring note. No upgrade performed.
