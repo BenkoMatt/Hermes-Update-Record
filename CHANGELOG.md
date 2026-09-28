@@ -5,6 +5,112 @@ host. See [`README.md`](./README.md) for format and privacy policy.
 
 ---
 
+### 2026-09-28 09:15 — Release Watcher: check_failed mystery solved — install format migrated, v0.21.4/v0.21.5 shipped, code now runs 4,108 canary commits ahead of v0.21.5
+
+**Status:** Monitoring + diagnosis. No upgrade performed by the watcher (one
+was executed upstream of it — see "Daily updates" below).
+
+**Why the watcher fired:** monitor output flipped from
+`latest=v0.21.3 installed=v0.21.3 behind=0` to
+`check_failed installed=unknown latest=v2026.9.24`.
+
+**What actually happened (verified):**
+
+- **Releases:** v0.21.4 (v2026.9.21, 2026-09-21) and v0.21.5 (v2026.9.24,
+  2026-09-24) shipped since v0.21.3. Both are "rolling-up" patch tags for
+  downstream consumers; curated notes are deferred to v0.22.0. v0.21.4
+  window: ~1,812 PRs. v0.21.5 window: ~460 PRs. (Notes fetched this run.)
+- **Install format migrated 2026-09-25/26:** the update pipeline moved to a
+  PM-managed ("bootstrap") layout — `/root/.hermes/installs/76f6e7e5145b5f39/`
+  (env venv, tools store `/root/.hermes/tools/`, ffmpeg 9.0.1 present).
+  `which hermes` now resolves to the env venv, whose workspace copy reports
+  `Hermes Agent vunknown` (no stamp/no git) — the direct cause of
+  `installed=unknown`. The real, blessed checkout remains
+  `/usr/local/lib/hermes-agent` at `v0.21.5+4108.g105568c.dirty`
+  (upstream `105568c1`) and the gateway runs from it (systemd unit
+  ExecStart, PID 1260418, started 2026-09-26 16:32 EDT).
+- **Head not behind — ahead:** HEAD is 4,108 commits AHEAD of the v0.21.5
+  tag (canary-style daily fast-forwards continue; reflog: fast-forwards
+  9/22, 9/23 ×2, 9/25 ×2, 9/26, 9/28 09:00). Driver still unidentified —
+  no system timer, no user timer, no crontab entry runs updates. It
+  predates this run and needs Matt's eyes (candidate: gateway housekeeping
+  or a desktop-app-triggered sync).
+- **`hermes update` CLI now warns** "pulled new code but did not restart
+  running gateways (mixed sys.modules)" — cosmetic-but-real: the gateway
+  has been running since 9/26 on the e295174 snapshot; today's 09:00
+  fast-forward to 105568c is live on disk, not in the gateway's memory.
+  Restarting is the fix; requires Matt's explicit go-ahead.
+- **Post-update state:** `active_profile` had reset to default; restored
+  to daily via `hermes profile use daily` this run (verified). Config
+  format migrated v46 → v48 across all 6 profiles during the 9/28 update
+  (no new settings required). Cron: single-store discipline intact —
+  global store has 23 jobs (21 active / 2 paused), matching the pre-9/28
+  baseline; ticker heartbeat fresh (59s); scheduler host = system gateway
+  (PID 1260418). No daily-mirror double-dispatch observed (both 9/28 09:00
+  executions sourced `builtin`).
+- **Local patch still intact:** `.hermes`-basename profile fallback in
+  `hermes_cli/profiles.py` (`normalize_profile_name`) survives — confirmed
+  present post-fast-forwards (uncommitted, git status shows
+  `M hermes_cli/profiles.py`).
+- **Unapplied local patch surfaced (stash@{0}, 2026-09-04):** a dashboard
+  `gated_auth_middleware` fallback accepting the desktop's
+  `X-Hermes-Session-Token` header (fixes Electron-mediated file-download
+  401s via saveGatewayFile → /api/fs/download). `X-Hermes-Session-Token`
+  still exists upstream (`web_server.py:358`) but the middleware has no
+  such fallback on current HEAD. Unreviewed upstream-side fix may exist;
+  needs Matt's decision: apply, or drop. A second old autostash
+  (stash@{1}, 2026-06-22) shows empty output to `git stash show`.
+- **Watcher script fixed:** `/root/.hermes/scripts/hermes-release-check.sh`
+  (and its daily-profile mirror) now (a) probes the blessed checkout venv
+  first and the PM env venv second instead of trusting PATH, (b) computes
+  `behind` from the checkout's git (the new version line never prints it),
+  (c) reports the stable base semver (v0.21.5) instead of the growing
+  canary suffix so weekly syncs don't re-fire it as noise. Post-fix output:
+  `latest=v0.21.5 installed=v0.21.5 behind=0` (behind grew to 17 mid-run —
+  all desktop/UX/gateway-restart fix commits; ~1,000 commits/day cadence).
+- **Known-warning triage:** doctor's "install out of sync (ffmpeg)" is a
+  false alarm — the ffmpeg 9.0.1 artifact lives in `/root/.hermes/tools/`
+  (PM-managed) while the doctor check still scans the legacy layout;
+  `ffmpeg` resolves in PATH and video_gen deps passed. doctor also wants
+  the dashboard unit to carry `RestartPreventExitStatus=78` (exit-78
+  permanent refusals currently crash-loop it) — one-line unit patch, next
+  time a dashboard restart is approved. Two pre-existing doctor warnings
+  unchanged (spotify/tts system deps; x_search missing XAI_API_KEY).
+
+**Relevant highlights from the v0.21.4/v0.21.5 windows** (headless-VPS
+lens): `--format stream-json` CLI output; `skills.auto_load` pinning;
+gateway `decline` unauthorized-DM behavior; `mcp.discovery_concurrency`
+cap; `session_search` after/before bounds + OR-relaxed retry; `hermes
+sessions set-journal-mode`; host-wide gateway singleton lock + Desktop
+attaching to the running backend; per-profile stop/start/restart under
+the host multiplexer + `gateway.standalone` opt-out; webhook deliveries
+mirrored into the target chat session; kanban design pass (two-column
+ticket modal, markdown task text) plus a run of kanban fixes in the
+canary window (aux-LLM key resolution, per-task skip events, PR
+acceptance as the assignee profile, blocked-task surfacing); cron
+multiplex fixes (satellite routing, routed manual runs, liveness naming
+the ticking scheduler, DST-proof auto-resume); `attachments.storage`
+config; `/goal` + queued prompts in the live dock; GPT-6 Sol/Terra/Luna
++ Claude Opus 5.5 catalogs; hot-path perf work (config loading, tool
+registry, gateway message handling). Skipped as not applicable:
+Desktop/TUI-only UX, voice, catalog plugins for platforms not in use.
+
+**Breakage:** none observed. Dashboard reachable (flags intact incl.
+`--open-profile daily`), Honcho connected, all 6 profiles healthy.
+
+**Action queue for Matt (all require his go-ahead):**
+1. Decide the daily-update driver (unknown since 9/15) — want it, or want
+   it found and stopped?
+2. A gateway + dashboard restart to load the 9/28 code (or fold into the
+   next deliberate update).
+3. `hermes gateway migrate --multiplex` — update output reports the
+   profile gateways are still separate; multiplex folds them under the
+   host gateway (aligns with per-profile start/stop in v0.21.5).
+4. Stash@{0} middleware patch: apply or drop.
+5. Dashboard unit: add `RestartPreventExitStatus=78`.
+6. Old autostash stash@{1} (6/22): `git stash show -p` review, then drop.
+
+---
 ### 2026-08-13 — Backfill entry: v0.18.2 → v0.20.0 upgrade history
 
 **Status:** Retrospective reconstruction. The entries below were backfilled
@@ -240,5 +346,28 @@ code has therefore been live since on or before 2026-09-15.
   store and daily mirror fire locks)
 
 **Breakage:** None observed.
+
+---
+
+### 2026-09-21 09:08 — Release Watcher: behind=0→2 race, desktop-only commits
+
+**Status:** Monitoring note. No upgrade performed.
+
+**Event:** The weekly watcher fired on `behind=0→2` at 09:01 EDT. Cause: a
+race, not a release — upstream pushed 2 commits (`00e08cec30` fix(desktop)
+Linux SIGTRAP crash diagnostics, `274bc7b8f6` docs(desktop)) at 09:00 EDT,
+one minute before the run, right after the morning fast-forward + gateway
+restart (08:53/08:55 EDT). `latest` is still v0.21.3 (matching installed);
+the v0.21.3 tag has no GitHub release object (the release lives on the
+date tag `v2026.9.14`, target `main`).
+
+**Verified this run:** read-only fetch moved origin/main to `274bc7b8f6`
+(HEAD stays at `ea0c2b82` until the next daily sync); both pending commits
+are desktop/Electron-only — zero impact on this headless VPS. Re-checked
+post-update state alongside the entry above: active_profile=daily,
+dashboard `--open-profile daily` intact, `normalize_profile_name()` patch
+intact, rogue `hermes-gateway-daily.service` absent, ticker heartbeat
+fresh, `hermes -p default cron status` reports the host gateway (PID
+2222314) as scheduler host under the new host-topology reporting.
 
 ---
