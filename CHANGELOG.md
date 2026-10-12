@@ -5,6 +5,179 @@ host. See [`README.md`](./README.md) for format and privacy policy.
 
 ---
 
+### 2026-10-12 09:20 — Release Watcher: v0.21.6 + v0.21.7 shipped (Oct 8 / Oct 12), monitor line garbled by dead gh token + update race, patches re-applied
+
+**Status:** Monitoring. No manual upgrade performed; the Oct 8 v0.21.6 update
+(desktop app) was external and is recorded here retroactively.
+
+**Releases:**
+- **v0.21.6** — published 2026-10-08 07:51 EDT. First release cut by the new
+  stable release pipeline. Rolls up 8,867 non-merge commits since v0.21.5
+  (2,106 PRs, 3,027 closed issues). Notable: dashboard auth hardening
+  (4 Tenable findings — X-Forwarded-For rate-limit reset, unbounded audit-log
+  writes, no body-size limit on /auth/, non-loopback login-code redirect),
+  git filter hardening against untrusted repos' clean/smudge/process filters,
+  email gateway display-name allowlist fix, unified Kanban workflow,
+  summary-first `hermes status`, cron-store writability warnings, persistent
+  shell fixes. Was **already installed Oct 8** (desktop app; gateway PID
+  985051 + dashboard 986160 restarted 09:11–09:13 EDT that day).
+- **v0.21.7** — published 2026-10-12 01:53 EDT. Rolls up 740 non-merge
+  commits / 204 PRs since v0.21.6. Notable: **source installs now follow
+  tagged releases by default** (`hermes update --set-channel main` to keep
+  following every commit; channel switch also in desktop About ▸ Updates),
+  reasoning survives `chat --resume` and gateway turns, update fetches use
+  the GitHub token when set and report rate limits honestly.
+
+**Why the monitor fired garbled (`latest=` empty, behind=791):** three
+overlapping causes, all verified live:
+1. **gh token for BenkoMatt is dead** (401 Bad credentials via
+   /root/.config/gh/hosts.yml; the `GITHUB_TOKEN` PAT in /root/.hermes/.env
+   is also 401). `gh release list` printed nothing → empty tag field.
+   Impact: github skill API ops, BenkoMatt-private git-over-HTTPS pushes
+   (Update Record/JLP use SSH and are unaffected — verified).
+2. **Update race at 09:00 EDT:** the desktop app drove a `hermes update`
+   while the monitor ran — update.lock stamped 09:00, autostash 09:01,
+   fast-forward to 3f2abce7f4 09:04, mid-pull the monitor saw origin/main
+   791 ahead → the transient `behind=791` line. Both numbers were noise;
+   settled state: HEAD = 3f2abce7f4 = v0.21.7+144.g3f2abce.dirty, **behind
+   origin/main = 0**.
+3. `xargs` on gh's empty output returns "" not "unknown", so the 401 path
+   printed a blank tag instead of check_failed (monitor hardening queued).
+
+**Patches re-applied cleanly after the pull (verified 09:07):** both
+`.hermes`-profile fixes are present in the working tree again —
+profiles.py basename→default mapping (7 lines) and the WS loopback-origin
+carve-out in _ws_host_origin_reason (15 lines, re-derived shape matching the
+stash). stash@{0} (hermes-update-autostash-20261012-130108) is the sync's
+own copy — redundant with the working tree, safe to drop (needs Matt).
+Stash@{1..3} unreviewed. This is the first sync where autostash re-apply
+worked without manual re-application.
+
+**Restart debt (desktop-owned processes; needs Matt):** gateway PID 985051
+started Oct 8 09:11 still serves the 25a71a74 snapshot — three update drops
+since (8a33891, 25a71a7→10/8 was already in, 3f2abce) — today's pull of
+`~144 commits to v0.21.7+` lives on disk, not in gateway memory. Dashboard
+PID 986160 (Oct 8, desktop-launched) shows the "manual restart still
+pending" banner for today's drop. Cron unaffected: ticker heartbeat fresh,
+host gateway hosts all 7 profiles, 21 active jobs.
+
+**Decisions needed from Matt:**
+1. **Update channel:** stay on the new default (stable/v0.21.7 tags — stops
+   the weekly behind-N churn; next roll-up ~144 commits pending as
+   v0.21.8) or `hermes update --set-channel main` (current behavior).
+2. **Re-auth gh** (`gh auth login`, interactive; Matt-side) + refresh
+   `GITHUB_TOKEN` in /root/.hermes/.env, or all latest-release lookups and
+   private-HTTPS pushes stay broken.
+3. Dashboard relaunch to load today's code (desktop-side action).
+
+**Skills:** 4 user-modified bundled skills (github, hermes-agent, himalaya,
+pdf). No new drift this week. hermes-agent stale-copy merge into stock
+v3.2.0 still pending (carried from 9/28). himalaya 10/5 fix intact.
+
+*(Committed together with the 10/5 entry that was left uncommitted.)*
+
+---
+
+### 2026-10-05 09:15 — Release Watcher: quiet week (v0.21.5, behind=2), overnight autostash dropped the desktop-session patch; re-applied + himalaya drift re-fixed
+
+**Status:** Monitoring + patch restoration. No upgrade performed.
+
+**Why the watcher fired:** monitor flipped from last week's
+`check_failed installed=unknown latest=v2026.9.24` to
+`latest=v0.21.5 installed=v0.21.5 behind=0` — the 9/28 script fix confirmed
+working. During this run HEAD fast-forwarded to `71574220`, 2 upstream
+commits landed behind (plugins entry-point `hermes status` crash fix +
+its test), and the monitor line self-corrected to `behind=0` after the
+refetch. **Installed (gateway memory) vs code on disk:** gateway PID
+1553935 started **2026-10-05 08:02 EDT** — the overnight/weekly 09:00
+refresh finally restarted it, so gateway memory and disk now match
+(71574220 = v0.21.5+7249). The "gateway restart debt" from 9/28 cleared
+itself. No restart performed or needed this run.
+
+**Found + fixed this run:**
+
+1. **Overnight autostash dropped the desktop-session patch.** The
+   (still-unidentified) daily sync autostashed local mods at 01:33 and
+   left them stashed instead of re-applying → working tree clean but
+   BOTH `.hermes`-profile fixes missing:
+   - `normalize_profile_name()` `.hermes`→`default` basename mapping
+     (AGENTS.md re-check requirement; upstream still lacks any native
+     fix — grep of profiles.py/_install_repair/_launchers confirms).
+   - WS loopback-origin allowance in `web_server_chat.py` (desktop
+     renderer's `http://127.0.0.1:<port>` origin vs remote dashboard).
+   **Action taken:** profiles.py hunk re-applied from stash@{0} verbatim
+   (`git apply --check` passed, 7 insertions). The WS hunk did NOT
+   apply — upstream 2026-10-03 `1cb25c3e33` refactored
+   `_ws_host_origin_reason` (single `origin_mismatch` return, new
+   `parsed is None` guard). Re-implemented the loopback-origin branch
+   on the new shape: loopback origins return None (allowed) before the
+   origin_mismatch return, only for http/https origins with a hostname,
+   preserving the fail-closed path for malformed authorities. Compile
+   check + repo tests pass.
+   **Net risk:** none beyond the historical one — HEAD is v0.21.5+7249;
+   the patch is current again. But the sync's autostash re-apply step is
+   evidently broken (2nd occurrence after 9/28); every future sync can
+   silently strand these fixes again. **Needs Matt:** identify the sync
+   driver (was on the 9/28 action queue, still unknown) or accept a
+   watcher-side post-sync patch-recheck.
+
+2. **Himalaya skill re-drifted after the 9/28 restore.** Our copy again
+   reversed `himalaya message move/copy` args (`move 42 "Archive"` vs
+   CLI's `<TARGET> <ID>...`) plus a wrong `--dir` flag on attachment
+   download (actual: `--downloads-dir`). `hermes skills reset himalaya
+   --restore` prompted for confirmation and cancelled non-interactively;
+   fixed manually with sed on the global copy + all 6 profile mirrors
+   (verified: no reversed examples remain, `--downloads-dir` correct,
+   mirrors byte-identical to the global fixed copy). Kept a
+   timestamped `.bak-watcher-20261005` next to the file. Remaining diff
+   vs stock is prose only ("target folder comes first" annotations).
+   **Note himalaya skill is now effectively correct-but-user-modified;
+   future drizzle from upstream will re-drift; the 9/28 root cause
+   (upstream briefly shipped the wrong order?) unknown — treat the CLI
+   --help as ground truth.**
+
+3. **hermes-agent skill: stale copy retained deliberately.** Drift grew
+   to 38 files (stock is now 1223-line v3.2.0 SKILL.md + new reference
+   refs incl. `project-context-files.md`, `native-mcp.md`,
+   `security-privacy.md`, `slash-commands.md`). Ours is v2.1.0 + 14
+   Matt-specific reference docs that `--restore` would delete. NOT
+   auto-restored. Needs a deliberate merge session: fold our 14
+   reference docs into the stock v3.2.0 layout, then re-baseline.
+
+**Releases:** none since v0.21.5 (v2026.9.24); v0.21.4/v0.21.5 were
+rolling patch tags with curated notes deferred to v0.22.0.
+
+**Relevant in the 2-behind commits (both now counted ahead after refetch):**
+- `e473f5a9c9` fix(plugins): skip default-on checks for entry-point paths
+  → fixes `hermes status` crashing on Windows when one pip-installed
+  plugin's spec (module:attr) is misread as a plugin directory and
+  hiding all other plugins on profiles that hadn't enabled it. Linux-
+  safe (colon paths are legal), cosmetic for us unless entry-point
+  plugins appear. No action.
+- `9192728734` test(plugins): entry-point spec must not abort plugin
+  status. No action.
+
+**Unchanged action queue (carry from 9/28; still needs Matt):**
+1. Identify the daily-update driver (unknown since 9/15) AND its broken
+   autostash-reapply — wants a decision: find/stop/fix, or have the
+   watcher re-apply patches post-sync each run.
+2. `hermes gateway migrate --multiplex` (folds 6 profile gateways under
+   the host multiplexer; aligns with per-profile start/stop in v0.21.5)
+   — note `hermes -p default cron status` still shows host gateway
+   serving ALL 7 profiles already (default, daily, research, reviewer,
+   security, webdev, work); verify the migrate output actually changes
+   anything before running it.
+3. Stash@{0} (now empty of profiles.py hunk; WS loopback fix re-derived,
+   not identical) — recommend dropping stash@{0} once the re-applied
+   working-tree state is confirmed good (it is this run); stash@{1}
+   (9/4 dashboard middleware session-token fallback) + stash@{2} (6/22
+   empty) still unreviewed, still needs Matt.
+4. Dashboard unit: add `RestartPreventExitStatus=78` (9/28 finding,
+   unchanged).
+5. hermes-agent skill deliberate merge (new this run).
+
+---
+
 ### 2026-09-28 09:15 — Release Watcher: check_failed mystery solved — install format migrated, v0.21.4/v0.21.5 shipped, code now runs 4,108 canary commits ahead of v0.21.5
 
 **Status:** Monitoring + diagnosis. No upgrade performed by the watcher (one
