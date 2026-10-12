@@ -76,6 +76,105 @@ v3.2.0 still pending (carried from 9/28). himalaya 10/5 fix intact.
 
 *(Committed together with the 10/5 entry that was left uncommitted.)*
 
+**Addendum 09:35 (same run, post-commit verifications):** after entry
+817ee09 was committed, the update flow finished while the parallel
+watcher run was still in flight — the launcher's dependency-sync tail
+consumed the pending-update marker and **restarted both gateway
+(PID 2967234, 09:06:08 EDT) and dashboard (PID 2969443, 09:08:28 EDT)
+onto today's code**, so decision item 3 (dashboard relaunch) is
+already obsolete. Verified working state: `hermes --version` =
+v0.21.7+144 (upstream current, behind=0), both `.hermes`-profile
+patches intact in the working tree, cron ticker heartbeat fresh
+post-restart. **Decision item 1 resolved by the updater itself:** the
+gateway unit was rewritten by the update and now carries
+`RestartPreventExitStatus=78` (the action-queue item from 2026-09-28)
+and launches via the updater-managed launcher — the install reports
+`stable`, i.e. the new tagged-release default channel. The
+watcher-side monitor fix (empty-gh guard + unauthenticated-API
+fallback; first cut mis-ranked date tags via sort -V, fixed to
+published-date/`head -1` semantics) is applied to
+`/root/.hermes/scripts/hermes-release-check.sh` and its daily-profile
+mirror — final output `latest=v0.21.7 installed=v0.21.7 behind=0`.
+
+---
+
+### 2026-10-12 09:11 — Release Watcher: v0.21.6 & v0.21.7 shipped — install riding the new stable update channel; watcher gh credential died (401)
+
+**Status:** Passive migration (automated weekly refresh) + monitoring
+fix. No watcher-initiated upgrade.
+
+**Event.** The monitor flipped from last week's healthy line to a
+mangled two-line summary: two things happened at once. (a) Two new
+releases shipped — **v0.21.6** (Oct 8) and **v0.21.7** (Oct 11) — and
+the automated Monday-morning refresh applied them before this run
+(install code moved from the v0.21.5-era canary to a v0.21.6+130
+checkout on Oct 8 09:11, then to the current tip of main +144 today
+09:06). (b) The host's `gh` credential lost authorization (401 Bad
+credentials), so the release lookup returned empty output and an
+`xargs` echo artifact produced the mangled line instead of the
+designed `check_failed` output.
+
+**Upstream state.**
+
+v0.21.6 (2026-10-08): first cut of the new stable release pipeline —
+a tagged roll-up of ~2,100 PRs since v0.21.5, with curated notes
+deferred to v0.22.0. Also in the window (documented in the release):
+dashboard authentication hardening (spoofed forwarding headers no
+longer reset the login rate limit; unbounded audit-log writes fixed;
+request-body limits on the public auth routes), a unified Kanban
+workflow definition, cron/store-writability warnings, approval flags
+for credential uploads and invisible Unicode in terminal commands,
+and local-model support plus CUDA llama.cpp builds.
+
+v0.21.7 (2026-10-11): ~204 PRs. For source installs the headline is
+**`hermes update` now follows tagged releases** instead of every
+commit on main — an install already newer than the latest release
+stays parked until the next release, and commit-following is opt-in
+via `--set-channel main`; the update's stable check uses the user's
+GitHub token when one is set. Also: reasoning replay across chat
+resume, updates no longer failing behind some firewalls, and a
+plugin-catalog update wave (Telegram Client re-pins, Hermes Quest
+security re-pin, several new community catalog entries).
+
+**Pre-upgrade analysis → what mattered on this host:**
+
+- **Stable update channel is the structural change.** The install now
+  reports `v0.21.7+144 … · stable` — it is parked on the stable
+  channel, 144 commits ahead of the v0.21.7 tag and even with main;
+  from here it advances to tagged releases only (next expected stop:
+  v0.22.0). This ends the weekly canary-drift (four-digit `+NNNN`
+  deltas) that has driven every watcher false-alarm since September.
+  Recommendation: stay on the new default stable channel.
+- **The two local post-update patches survived both drops** — the
+  desktop default-home basename mapping in profile-name normalization
+  and the WebSocket loopback-origin allowance for the desktop
+  renderer are both present in the working tree after the update
+  (the autostash-reapply step worked cleanly this time).
+- **Dashboard auth hardening is the first release directly touching
+  this host's dashboard exposure path.** No action possible without
+  the update, which has already applied.
+- Desktop-app-only and speech/voice features are out of scope for a
+  headless server. Local-model/CUDA capabilities matter only for a
+  separate self-hosted rig, not this host.
+
+**Verification (read-only):** gateway and dashboard processes restarted
+this morning onto the new code by the update flow itself (this clears
+the restart debt recorded 2026-09-28 and 2026-10-05); install pending/
+recovery markers consumed (no interrupted update); cron ticker
+heartbeat fresh post-restart; the gateway unit file now carries
+`RestartPreventExitStatus=78` from the updater's rewrite — the
+2026-09-28 action-queue item resolved itself this run.
+
+**Watcher fix (this run):** the monitor script's release lookup
+hardened — empty gh output now forces `unknown` (eliminating the
+`xargs` echo artifact), with a git-based newest-`vX.Y.Z`-tag fallback
+when the gh credential is dead, so the watcher keeps functioning while
+auth is down. Mirrors kept identical.
+
+**Needs the operator:** re-authenticate the host's gh credential — it
+gates this watcher's GitHub lookups and, per the v0.21.7 release
+notes, the updater's own stable-check path.
+
 ---
 
 ### 2026-10-05 09:15 — Release Watcher: quiet week (v0.21.5, behind=2), overnight autostash dropped the desktop-session patch; re-applied + himalaya drift re-fixed
