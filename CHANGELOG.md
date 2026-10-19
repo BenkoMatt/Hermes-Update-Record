@@ -5,6 +5,130 @@ host. See [`README.md`](./README.md) for format and privacy policy.
 
 ---
 
+### 2026-10-19 09:12 — Release Watcher: v0.22.0/.1/.2 shipped Oct 13–15 and were installed by desktop-driven `hermes update` runs; current state verified (stable, 0 behind); monitor `behind` semantics patched for the tagged-release channel
+
+**Status:** Monitoring only — no watcher-driven upgrade (policy unchanged; updates need Matt).
+
+**Why the monitor fired:** the stored previous snapshot was still the garbled 10/12
+capture (`latest=` empty / `unknown installed=v0.21.6 behind=0`). Current:
+`latest=v0.22.2 installed=v0.22.2 behind=0`.
+
+**Releases:**
+- **v0.22.0 "The Threshold Release"** (published 10/13 23:21 EDT; ~24,200 commits,
+  ~6,080 PRs, ~1.14M deletions since v0.21.0). Relevant here:
+  - **Stable SemVer release channels are now the default** — we are on `stable`
+    (`hermes --version` reports it + "Up to date"). `hermes update --set-channel
+    main` remains for bleeding-edge; rollbacks are labelled and never auto.
+  - **One gateway + one desktop backend per machine** — the supported topology;
+    matches our multiplexed gateway (receipts confirm one gateway serving all
+    7 profiles). No action.
+  - **Memory providers moved into catalog plugins (incl. Honcho)** — auto-migrated
+    with data intact; doctor: `honcho provider active`. Daily plugin-check receipts
+    show a newer catalog pin for honcho (and homeassistant) → optional
+    `hermes plugins update honcho` (Matt).
+  - **`sessions.auto_prune` now defaults ON** (ended sessions idle 90d pruned at
+    startup, VACUUM at 25% reclaimable, stale cron/kanban/subagent sessions
+    closed) — **our config explicitly pins `auto_prune: false`; history stays
+    protected.** Doctor's only real advisory: state.db 1.0 GB (1,982 sessions,
+    142,505 messages) — bounded growth is a Matt decision; recommendation is to
+    keep the archive (existing policy).
+  - Retired idle/daily `session_reset` modes → ours is `mode: none` (doctor
+    confirms); **`hermes sync` (Skill Sync) removed** — zero skill references
+    (grep clean); bundled tirith scanner removed (built-in rules replace it); tool
+    renames `todo→todo_list`, `cronjob→cronjob_manage`, `process→process_manage`
+    (aliases kept — doctor still lists the old names).
+  - **Cron:** self-healing schedules (a fire that never reached the model re-runs
+    after 5/15/30 min; a slot skipped during a restart fires once; provider
+    "retry-after" parks quietly) — directly addresses our documented ticker-stall
+    misses; unpinned jobs follow the main model at fire time; quieter alerting
+    (one alert/incident + `cron.failure_repeat_alert_hours`; `failure_deliver`
+    reroute/mute); `--paused` and `--interpreter` job options; multiplexed
+    per-profile env/secrets with positive-evidence delivery and secret redaction
+    (matches 10/2 double-dispatch history).
+  - **Kanban:** workers ride out provider trouble (failed turns retry in place;
+    5xx/rate-limits requeue without burning retries — helpful with ollama-cloud);
+    cards surface the worker's last output on failure and dispatch explains holds;
+    new `kanban edit --title/--body/--priority`, `kanban create --body-file`,
+    `kanban_schedule`, single workflow definition for columns.
+  - **Delegation:** failed fan-out children surface at once; owner crash keeps
+    finished child work; `delegation.fallback_providers` gives children their own
+    provider chain; `child_timeout_seconds` measures inactivity.
+  - **Security:** child processes no longer inherit adapter/dashboard secrets;
+    sharper redaction (file reads/terminal mask .env secrets; `hermes config get`
+    masks unless --raw; memory hand-offs scrubbed); owner-only files at rest
+    (state.db 0600); zsh/dash pipe-to-shell and cloud-metadata fetches need
+    approval; telemetry opt-in, default off. Codebase −34% (1.06M→698k lines),
+    ~2.1k fewer fixed prompt tokens, ~19 tools lazy-load behind `tool_search`.
+    Python 3.14 runtime (matches 3.14.7). Transient 503/529 provider failures
+    retry in bounded visible cycles.
+  - Not used here (skipped): onboarding/welcome free tier, hosted Connectors
+    (stay off), one-click local models (CPU-only VPS), Bot Screen streaming,
+    browser password fills, i18n catalog, MSIX/Store packaging, prompt caching
+    (opt-in; ollama-cloud), webhooks/`cron_job` event routing (nothing configured).
+- **v0.22.1** (10/14 19:59 EDT) — shipped from the wrong commit (unreleased
+  gateway work leaked in; Store clients could stick "Connecting"). **Never pulled
+  here** — receipts jump 0.22.0→0.22.2, so its known issue (0.22.1-gateway
+  sessions not deletable in 0.22.2) does not apply.
+- **v0.22.2** (10/15 04:21 EDT) — the 0.22.1 fix line: gateway starts again after
+  a reboot despite PID recycling (relevant: systemd-supervised gateway on a
+  rebooting VPS, #138594), long local-model turn fixes (N/A), httpx2/WhatsApp
+  bridge/npm advisory bumps (now live), MS Store lane (N/A).
+
+**Receipt timeline (desktop-driven; EDT):** 10/14 08:44 attempt from 0.21.7 fails
+`channel_unresolved` (the documented stable-channel ancestry timeout) → 10/14
+09:03 `--yes` retry lands 0.22.0 (e06df9c2) through apply/deps/build, then the
+update process **dies during build** (detected+healed by the launcher's
+early-recovery when retried 10/15 12:06 UTC) → 10/15 08:06 attempt fails
+`channel_unresolved` again → 10/15 08:28–08:33 **success 0.22.0→0.22.2**
+(d923a5eb, gateway+dashboard restarted) → routine success no-ops 10/16 08:17,
+10/17 10:14, 10/18 20:49 (each re-stashes and restores the local patches cleanly;
+10/18 also restarted the fleet onto current code). Note: `updates.pre_update_backup`
+is `mode: off` — updates run WITHOUT pre-update snapshots; recovery rests on
+autostash + early-recovery. Gateway was also systemd-stopped 07:32:50 and started
+07:51:12 today (clean 14s drain, no update receipt — likely desktop/manual),
+with overnight Telegram connect retries (5–8 attempts around 21:12, recovered)
+and two async child-exit 255 warnings (02:06/02:48) — noise only.
+
+**Post-update chore audit (all green, nothing re-applied):**
+`/root/.hermes/active_profile` = `daily` through five update runs (the documented
+reset trap appears retired by the new updater — Oct 6 consolidation plan
+anticipated); both `.hermes`-basename patches intact (worktree dirty = exactly
+profiles.py + web_server_chat.py); no rogue user-scope gateway unit; cron ticker
+heartbeat fresh (09:01); 24 cron jobs (22 active/2 paused), all dispatched on
+time; config auto-migrated (now v50) with no deprecated keys; doctor: no security
+advisories, npm deps clean, honcho active, gateway + 6 profiles on glm-5.3-flash;
+gh CLI token (BenkoMatt) AND `.env` GITHUB_TOKEN both accepted by api.github.com
+(10/12 decision item 2 closed). One new v0.22-era warning to note: **"Stale
+systemd unit detected: TimeoutStopSec=90s but drain_timeout=180s +
+cron_drain_timeout=30s (expected >=210s)"** → fix is `hermes gateway install
+--force` (restarts the gateway — Matt's call); risk is low (observed drain 14s).
+
+**Found + fixed this run — monitor `behind` semantics patched:** this run's fetch
+moved the stale `origin/main` ref (~2,139 commits past the v0.22.2 tag; per the
+release notes that work ships in v0.23.0, not via updates), and the unpatched
+script would have counted it as `behind` and false-alarmed every future run. New
+logic: HEAD exactly on a tag (stable channel) → BEHIND=0 (the release delta is
+carried by LATEST-vs-INSTALLED); canary/main installs keep the true
+HEAD..origin/main count. Applied to the global script + daily mirror (diff
+verified); verified output `latest=v0.22.2 installed=v0.22.2 behind=0`.
+
+**Pending for Matt:**
+1. `hermes gateway install --force` to regenerate the unit and clear the
+   TimeoutStopSec staleness (restarts gateway; alternatively shorten drain
+   timeouts — not recommended).
+2. Optional: `hermes plugins update honcho` (newer catalog pin exists). The
+   homeassistant pin also has an update but doctor reports its system dependency
+   unmet — keep-or-remove decision.
+3. Optional: refresh the `hermes-agent` skill against the bundled v0.22.2 stock
+   copy (CLI surface changed: `hermes pm`, connectors, stable-channel flags,
+   local models) — the stale-copy merge flagged since 9/28, now more relevant.
+
+**Skills:** no release-driven skill changes required (renamed tools keep aliases;
+nothing references removed `hermes sync`); carried items unchanged (4
+user-modified bundled skills; hermes-agent skill merge above).
+
+---
+
 ### 2026-10-12 09:20 — Release Watcher: v0.21.6 + v0.21.7 shipped (Oct 8 / Oct 12), monitor line garbled by dead gh token + update race, patches re-applied
 
 **Status:** Monitoring. No manual upgrade performed; the Oct 8 v0.21.6 update
